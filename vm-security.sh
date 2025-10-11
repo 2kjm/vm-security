@@ -423,19 +423,15 @@ run_setup() {
         echo ""
     
     if [ -n "$CURRENT_IP" ]; then
-        cat << EOF
-1) Current IP only        - $CURRENT_IP ${RED}⚠ Will lock you out if IP changes!${NC}
-2) /24 Network Range      - $SUGGESTED_RANGE_24 ${GREEN}✓ Recommended (256 IPs)${NC}
-3) /16 Network Range      - $SUGGESTED_RANGE_16 ${YELLOW}⚠ Less secure (65K IPs)${NC}
-4) Custom                 - Enter your own IP(s) or range(s)
-5) Use configured value   - $FAIL2BAN_IGNOREIP
-EOF
+        echo -e "1) Current IP only        - $CURRENT_IP ${RED}⚠ Will lock you out if IP changes!${NC}"
+        echo -e "2) /24 Network Range      - $SUGGESTED_RANGE_24 ${GREEN}✓ Recommended (256 IPs)${NC}"
+        echo -e "3) /16 Network Range      - $SUGGESTED_RANGE_16 ${YELLOW}⚠ Less secure (65K IPs)${NC}"
+        echo    "4) Custom                 - Enter your own IP(s) or range(s)"
+        echo    "5) Use configured value   - $FAIL2BAN_IGNOREIP"
         MENU_MAX=5
     else
-        cat << EOF
-1) Enter IP manually      - Type your public IP (use: curl ifconfig.me)
-2) Use configured value   - $FAIL2BAN_IGNOREIP ${RED}⚠ Only localhost!${NC}
-EOF
+        echo -e "1) Enter IP manually      - Type your public IP (use: curl ifconfig.me)"
+        echo -e "2) Use configured value   - $FAIL2BAN_IGNOREIP ${RED}⚠ Only localhost!${NC}"
         MENU_MAX=2
     fi
         echo ""
@@ -511,18 +507,17 @@ EOF
         echo ""
     
     # Final confirmation
-    cat << EOF
-Configuration:
-  User: $NEW_USER
-  SSH Port: $SSH_PORT
-  fail2ban: $FAIL2BAN_MAXRETRY attempts, ${FAIL2BAN_BANTIME}s ban
-  Whitelisted: $FAIL2BAN_IGNOREIP
-
-${YELLOW}⚠️  CRITICAL REMINDERS:${NC}
-  1. Test SSH in a NEW terminal BEFORE logging out
-  2. Keep this terminal open until SSH access verified
-  
-EOF
+    echo ""
+    echo "Configuration:"
+    echo "  User: $NEW_USER"
+    echo "  SSH Port: $SSH_PORT"
+    echo "  fail2ban: $FAIL2BAN_MAXRETRY attempts, ${FAIL2BAN_BANTIME}s ban"
+    echo "  Whitelisted: $FAIL2BAN_IGNOREIP"
+    echo ""
+    echo -e "${YELLOW}⚠️  CRITICAL REMINDERS:${NC}"
+    echo "  1. Test SSH in a NEW terminal BEFORE logging out"
+    echo "  2. Keep this terminal open until SSH access verified"
+    echo ""
     read -p "Continue? (y/n) " -n 1 -r
     echo
     [[ ! $REPLY =~ ^[Yy]$ ]] && exit 0
@@ -870,82 +865,79 @@ ${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━
 EOF
     fi
     
-    cat << EOF
-${CYAN}🔒 AUTHENTICATION${NC}
-✓ SSH Key Auth: ENABLED (primary)
-✓ Password Auth: DISABLED (SSH)
-✓ Root Login: DISABLED
-✓ Password Set: YES (for sudo/console)
-
-${CYAN}🧪 TEST SSH NOW:${NC}
-  ${GREEN}ssh -p $SSH_PORT $NEW_USER@$SERVER_IP${NC}
-
-Expected: Login without password, then test: ${GREEN}sudo whoami${NC}
-
-${CYAN}📦 CONFIGURED${NC}
-✅ SSH Hardening       Strong ciphers, key-only auth
-✅ fail2ban            $FAIL2BAN_MAXRETRY attempts, ${FAIL2BAN_BANTIME}s ban
-✅ UFW Firewall        Default deny, SSH allowed (port $SSH_PORT)
-✅ Audit Logging       SOC2-compliant auditd
-✅ File Integrity      AIDE daily checks
-✅ Auto Updates        Security patches
-✅ Time Sync           chrony (NTP)
-✅ Password Policy     14+ chars, 90-day expiry
-✅ Kernel Hardening    Network security
-✅ Log Retention       365 days
-
-${CYAN}🛠️  COMMANDS${NC}
-  ${GREEN}vm-security status${NC}            Quick overview
-  ${GREEN}sudo vm-security status${NC}       Full details
-  ${GREEN}vm-security logs${NC}              View security logs
-  ${GREEN}sudo vm-security whitelist${NC}    Add IP to whitelist (dynamic IP helper)
-  ${GREEN}sudo vm-security reapply${NC}      Update security
-
-${CYAN}📁 FILES${NC}
-Setup log:         $LOG_FILE
-SSH config:        /etc/ssh/sshd_config.d/99-hardening.conf
-fail2ban config:   /etc/fail2ban/jail.local
-
-${YELLOW}🔑 Password Recovery:${NC}
-  ${RED}No recovery - password only shown once during setup!${NC}
-  ${YELLOW}Use cloud console to reset if lost:${NC} ${GREEN}sudo passwd $NEW_USER${NC}
-
-EOF
+    echo ""
+    echo -e "${CYAN}🔒 AUTHENTICATION${NC}"
+    echo "✓ SSH Key Auth: ENABLED (primary)"
+    echo "✓ Password Auth: DISABLED (SSH)"
+    echo "✓ Root Login: DISABLED"
+    echo "✓ Password Set: YES (for sudo/console)"
+    echo ""
+    echo -e "${CYAN}🧪 TEST SSH NOW:${NC}"
+    echo -e "  ${GREEN}ssh -p $SSH_PORT $NEW_USER@$SERVER_IP${NC}"
+    echo ""
+    echo -e "Expected: Login without password, then test: ${GREEN}sudo whoami${NC}"
+    echo ""
+    echo -e "${CYAN}📦 CONFIGURED${NC}"
+    echo "✅ SSH Hardening       Strong ciphers, key-only auth"
+    echo "✅ fail2ban            $FAIL2BAN_MAXRETRY attempts, ${FAIL2BAN_BANTIME}s ban"
+    echo "✅ UFW Firewall        Default deny, SSH allowed (port $SSH_PORT)"
+    echo "✅ Audit Logging       SOC2-compliant auditd"
+    echo "✅ File Integrity      AIDE daily checks"
+    echo "✅ Auto Updates        Security patches"
+    echo "✅ Time Sync           chrony (NTP)"
+    echo "✅ Password Policy     14+ chars, 90-day expiry"
+    echo "✅ Kernel Hardening    Network security"
+    echo "✅ Log Retention       365 days"
+    echo ""
+    echo -e "${CYAN}🛠️  COMMANDS${NC}"
+    echo -e "  ${GREEN}vm-security status${NC}            Quick overview"
+    echo -e "  ${GREEN}sudo vm-security status${NC}       Full details"
+    echo -e "  ${GREEN}vm-security logs${NC}              View security logs"
+    echo -e "  ${GREEN}sudo vm-security whitelist${NC}    Add IP to whitelist (dynamic IP helper)"
+    echo -e "  ${GREEN}sudo vm-security reapply${NC}      Update security"
+    echo ""
+    echo -e "${CYAN}📁 FILES${NC}"
+    echo "Setup log:         $LOG_FILE"
+    echo "SSH config:        /etc/ssh/sshd_config.d/99-hardening.conf"
+    echo "fail2ban config:   /etc/fail2ban/jail.local"
+    echo ""
+    echo -e "${YELLOW}🔑 Password Recovery:${NC}"
+    echo -e "  ${RED}No recovery - password only shown once during setup!${NC}"
+    echo -e "  ${YELLOW}Use cloud console to reset if lost:${NC} ${GREEN}sudo passwd $NEW_USER${NC}"
+    echo ""
 
     if [ -n "$CURRENT_IP" ]; then
         NETWORK_PREFIX=$(echo $CURRENT_IP | cut -d. -f1-3)
-        cat << EOF
-${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}
-${YELLOW}  📡 DYNAMIC IP PROTECTION${NC}
-${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}
-
-${CYAN}Current whitelist:${NC} $FAIL2BAN_IGNOREIP
-
-${YELLOW}⚠️  If your ISP uses DHCP (most do), your IP may change!${NC}
-
-${CYAN}If your IP changes and you get locked out:${NC}
-  1. Access via cloud console (password: the one you set)
-  2. Run: ${GREEN}sudo vm-security whitelist${NC}
-  3. Choose option 2 to add your new /24 range
-
-${CYAN}Manual method (edit config):${NC}
-  ${GREEN}sudo nano /etc/fail2ban/jail.local${NC}
-  Change: ignoreip = 127.0.0.1/8 ${NETWORK_PREFIX}.0/24
-  Then:   ${GREEN}sudo systemctl restart fail2ban${NC}
-
-EOF
+        echo ""
+        echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e "${YELLOW}  📡 DYNAMIC IP PROTECTION${NC}"
+        echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo ""
+        echo -e "${CYAN}Current whitelist:${NC} $FAIL2BAN_IGNOREIP"
+        echo ""
+        echo -e "${YELLOW}⚠️  If your ISP uses DHCP (most do), your IP may change!${NC}"
+        echo ""
+        echo -e "${CYAN}If your IP changes and you get locked out:${NC}"
+        echo "  1. Access via cloud console (password: the one you set)"
+        echo -e "  2. Run: ${GREEN}sudo vm-security whitelist${NC}"
+        echo "  3. Choose option 2 to add your new /24 range"
+        echo ""
+        echo -e "${CYAN}Manual method (edit config):${NC}"
+        echo -e "  ${GREEN}sudo nano /etc/fail2ban/jail.local${NC}"
+        echo "  Change: ignoreip = 127.0.0.1/8 ${NETWORK_PREFIX}.0/24"
+        echo -e "  Then:   ${GREEN}sudo systemctl restart fail2ban${NC}"
+        echo ""
     fi
 
-    cat << EOF
-${YELLOW}🆘 Emergency Access:${NC}
-   • Cloud console still works (password-based)
-   • Unban yourself: ${GREEN}sudo fail2ban-client unban YOUR_IP${NC}
-
-${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  🎉 Setup Complete! Test SSH before closing this window!
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}
-
-EOF
+    echo ""
+    echo -e "${YELLOW}🆘 Emergency Access:${NC}"
+    echo "   • Cloud console still works (password-based)"
+    echo -e "   • Unban yourself: ${GREEN}sudo fail2ban-client unban YOUR_IP${NC}"
+    echo ""
+    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${GREEN}  🎉 Setup Complete! Test SSH before closing this window!${NC}"
+    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
 }
 
 ################################################################################
