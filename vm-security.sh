@@ -112,33 +112,31 @@ setup_user_password() {
 ################################################################################
 show_help() {
     clear
-    cat << EOF
-${BLUE}╔══════════════════════════════════════════════════════════════════════╗
-║           VM Security Management Tool - Help                         ║
-╚══════════════════════════════════════════════════════════════════════╝${NC}
-
-${GREEN}Commands:${NC}
-  ${CYAN}setup${NC}              Initial security hardening (SOC2-aligned)
-  ${CYAN}status${NC}             Show current security status
-  ${CYAN}status --detailed${NC}  Show detailed security analysis
-  ${CYAN}reapply${NC}            Re-run security hardening (safe for existing setups)
-  ${CYAN}logs${NC}               View security logs and reports
-  ${CYAN}unban <ip>${NC}         Unban IP from fail2ban (use 'all' for all IPs)
-  ${CYAN}whitelist${NC}          Add IP/range to fail2ban whitelist (for dynamic IPs)
-  ${CYAN}install${NC}            Install commands system-wide
-  ${CYAN}help${NC}               Show this help
-
-${GREEN}Examples:${NC}
-  sudo ./vm-security.sh setup          # First time setup (interactive)
-  vm-security status                   # Check security status
-  sudo vm-security reapply             # Re-apply security
-  vm-security unban 1.2.3.4            # Unban IP
-
-${GREEN}After installation:${NC}
-  vm-security-status    # Quick alias
-  security-status       # Even shorter
-
-EOF
+    echo -e "${BLUE}╔══════════════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${BLUE}║           VM Security Management Tool - Help                         ║${NC}"
+    echo -e "${BLUE}╚══════════════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+    echo -e "${GREEN}Commands:${NC}"
+    echo -e "  ${CYAN}setup${NC}              Initial security hardening (SOC2-aligned)"
+    echo -e "  ${CYAN}status${NC}             Show current security status"
+    echo -e "  ${CYAN}status --detailed${NC}  Show detailed security analysis"
+    echo -e "  ${CYAN}reapply${NC}            Re-run security hardening (safe for existing setups)"
+    echo -e "  ${CYAN}logs${NC}               View security logs and reports"
+    echo -e "  ${CYAN}unban <ip>${NC}         Unban IP from fail2ban (use 'all' for all IPs)"
+    echo -e "  ${CYAN}whitelist${NC}          Add IP/range to fail2ban whitelist (for dynamic IPs)"
+    echo -e "  ${CYAN}install${NC}            Install commands system-wide"
+    echo -e "  ${CYAN}help${NC}               Show this help"
+    echo ""
+    echo -e "${GREEN}Examples:${NC}"
+    echo "  sudo ./vm-security.sh setup          # First time setup (interactive)"
+    echo "  vm-security status                   # Check security status"
+    echo "  sudo vm-security reapply             # Re-apply security"
+    echo "  vm-security unban 1.2.3.4            # Unban IP"
+    echo ""
+    echo -e "${GREEN}After installation:${NC}"
+    echo "  vm-security-status    # Quick alias"
+    echo "  security-status       # Even shorter"
+    echo ""
 }
 
 ################################################################################
@@ -827,42 +825,38 @@ EOF
     
     SERVER_IP=$(hostname -I | awk '{print $1}')
     
-    cat << EOF
-
-${GREEN}╔══════════════════════════════════════════════════════════════════════╗
-║                   ✅ ALL SECURITY MEASURES APPLIED                   ║
-╚══════════════════════════════════════════════════════════════════════╝${NC}
-
-${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ⚠️  TEST SSH ACCESS IN A NEW TERMINAL BEFORE CLOSING THIS ONE!
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}
-
-${CYAN}📋 YOUR SERVER DETAILS${NC}
-Server IP:         $SERVER_IP
-SSH Port:          $SSH_PORT
-Admin User:        $NEW_USER
-Your IP:           ${CURRENT_IP:-Not detected}
-Whitelist:         $FAIL2BAN_IGNOREIP
-
-EOF
+    echo ""
+    echo -e "${GREEN}╔══════════════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}║                   ✅ ALL SECURITY MEASURES APPLIED                   ║${NC}"
+    echo -e "${GREEN}╚══════════════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+    echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${YELLOW}  ⚠️  TEST SSH ACCESS IN A NEW TERMINAL BEFORE CLOSING THIS ONE!${NC}"
+    echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo -e "${CYAN}📋 YOUR SERVER DETAILS${NC}"
+    echo "Server IP:         $SERVER_IP"
+    echo "SSH Port:          $SSH_PORT"
+    echo "Admin User:        $NEW_USER"
+    echo "Your IP:           ${CURRENT_IP:-Not detected}"
+    echo "Whitelist:         $FAIL2BAN_IGNOREIP"
+    echo ""
 
     # Display password prominently if set
     if [ -n "$USER_PASSWORD" ]; then
-        cat << EOF
-${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}
-${GREEN}  🔐 YOUR GENERATED PASSWORD (SAVE THIS NOW - ONLY SHOWN ONCE!)${NC}
-${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}
-
-  Username: ${CYAN}$NEW_USER${NC}
-  Password: ${YELLOW}$USER_PASSWORD${NC}
-
-${RED}⚠️  CRITICAL: This password is NOT saved to logs!${NC}
-${YELLOW}    Copy to your password manager NOW!${NC}
-${YELLOW}    Required for: sudo commands, console access, recovery${NC}
-
-${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}
-
-EOF
+        echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e "${GREEN}  🔐 YOUR GENERATED PASSWORD (SAVE THIS NOW - ONLY SHOWN ONCE!)${NC}"
+        echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+        echo -e "  Username: ${CYAN}$NEW_USER${NC}"
+        echo -e "  Password: ${YELLOW}$USER_PASSWORD${NC}"
+        echo ""
+        echo -e "${RED}⚠️  CRITICAL: This password is NOT saved to logs!${NC}"
+        echo -e "${YELLOW}    Copy to your password manager NOW!${NC}"
+        echo -e "${YELLOW}    Required for: sudo commands, console access, recovery${NC}"
+        echo ""
+        echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo ""
     fi
     
     echo ""
@@ -935,7 +929,7 @@ EOF
     echo -e "   • Unban yourself: ${GREEN}sudo fail2ban-client unban YOUR_IP${NC}"
     echo ""
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${GREEN}  🎉 Setup Complete! Test SSH before closing this window!${NC}"
+    echo -e "${GREEN}  🎉 Setup Complete! Test SSH and copy password from above before closing this window!${NC}"fr
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
 }
@@ -964,23 +958,21 @@ run_reapply() {
 ################################################################################
 show_logs() {
     clear
-    cat << EOF
-${BLUE}╔══════════════════════════════════════════════════════════════════════╗
-║           SECURITY LOGS & REPORTS                                    ║
-╚══════════════════════════════════════════════════════════════════════╝${NC}
-
-${CYAN}📁 Log Storage Locations:${NC}
-
-1. Authentication:  /var/log/auth.log, /var/log/fail2ban.log
-2. Audit Logs:      /var/log/audit/audit.log (SOC2)
-3. File Integrity:  /var/log/aide/ (daily reports)
-4. System:          /var/log/syslog, /var/log/ufw.log
-
-${CYAN}📊 Retention:${NC} Auth logs: 365 days, Audit: Permanent
-
-${CYAN}🔍 Quick Views:${NC}
-
-EOF
+    echo -e "${BLUE}╔══════════════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${BLUE}║           SECURITY LOGS & REPORTS                                    ║${NC}"
+    echo -e "${BLUE}╚══════════════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+    echo -e "${CYAN}📁 Log Storage Locations:${NC}"
+    echo ""
+    echo "1. Authentication:  /var/log/auth.log, /var/log/fail2ban.log"
+    echo "2. Audit Logs:      /var/log/audit/audit.log (SOC2)"
+    echo "3. File Integrity:  /var/log/aide/ (daily reports)"
+    echo "4. System:          /var/log/syslog, /var/log/ufw.log"
+    echo ""
+    echo -e "${CYAN}📊 Retention:${NC} Auth logs: 365 days, Audit: Permanent"
+    echo ""
+    echo -e "${CYAN}🔍 Quick Views:${NC}"
+    echo ""
     
     PS3="Select log (0 to exit): "
     options=(
