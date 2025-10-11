@@ -26,7 +26,7 @@
 
 ```bash
 # Download
-curl -fsSL https://raw.githubusercontent.com/YOUR_USERNAME/vm-security/main/vm-security.sh -o vm-security.sh
+curl -fsSL https://raw.githubusercontent.com/2kjm/vm-security/main/vm-security.sh -o vm-security.sh
 chmod +x vm-security.sh
 
 # Install system-wide (optional but recommended)
