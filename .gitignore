@@ -1,0 +1,30 @@
+# Security and sensitive files
+*.log
+*.backup
+*.bak
+*~
+
+# Test files
+test-*.sh
+test-*.log
+
+# Local configuration
+config.local
+*.local
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
