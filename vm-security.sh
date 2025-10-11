@@ -56,13 +56,16 @@ check_status() {
 
 # Validate IP address or CIDR notation
 validate_ip_or_cidr() {
-    local input=$1
+    local input
+    input=$1
     
     for ip in $input; do
         # CIDR notation
         if [[ "$ip" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}$ ]]; then
-            local ip_part=$(echo $ip | cut -d'/' -f1)
-            local mask_part=$(echo $ip | cut -d'/' -f2)
+            local ip_part
+            local mask_part
+            ip_part=$(echo $ip | cut -d'/' -f1)
+            mask_part=$(echo $ip | cut -d'/' -f2)
             IFS='.' read -ra octets <<< "$ip_part"
             for octet in "${octets[@]}"; do
                 [ "$octet" -lt 0 ] 2>/dev/null || [ "$octet" -gt 255 ] 2>/dev/null && return 1
@@ -81,67 +84,27 @@ validate_ip_or_cidr() {
     return 0
 }
 
-# Setup password for user (interactive)
+# Setup password for user (automatic random hex)
 setup_user_password() {
     local user=$1
-    local random_pass=$(openssl rand -hex 16)
+    local random_pass
+    random_pass=$(openssl rand -hex 16)
     
     echo ""
-    echo -e "${CYAN}Setting up password for $user...${NC}"
+    print_status "Generating secure password for $user..."
     echo "Required for: sudo commands, emergency console access, recovery operations"
     echo ""
-    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${GREEN}  🔐 GENERATED SECURE PASSWORD (32 characters)${NC}"
-    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo ""
-    echo -e "  ${YELLOW}${random_pass}${NC}"
-    echo ""
-    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo ""
-    echo -e "${YELLOW}⚠️  COPY THIS PASSWORD NOW!${NC}"
-    echo ""
-    echo "Options: 1) Use generated password (recommended)  2) Set my own"
-    echo ""
     
-    while true; do
-        read -p "Select option (1 or 2): " choice
-        case $choice in
-            1)
-                if echo "$user:$random_pass" | chpasswd; then
-                    print_success "Password set successfully!"
-                    echo ""
-                    echo -e "${GREEN}Username: ${CYAN}$user${NC} | Password: ${YELLOW}$random_pass${NC}"
-                    echo ""
-                    echo -e "${YELLOW}Save this in a password manager!${NC}"
-                    read -p "Press Enter after you've saved the password..." -r
-                    
-                    # Save to log file
-                    [ -n "$LOG_FILE" ] && cat >> "$LOG_FILE" << LOGEOF
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-CREDENTIALS (stored securely in this log file)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Username: $user
-Password: $random_pass
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-LOGEOF
-                    return 0
-                else
-                    print_error "Failed to set password. Trying manual method..."
-                    passwd "$user"
-                    return $?
-                fi
-                ;;
-            2)
-                echo ""
-                passwd "$user" && return 0 || continue
-                ;;
-            *)
-                print_error "Invalid option. Please select 1 or 2."
-                ;;
-        esac
-    done
+    if echo "$user:$random_pass" | chpasswd; then
+        print_success "Password set successfully!"
+        
+        # Export for final summary (NOT saved to log for security)
+        USER_PASSWORD="$random_pass"
+        return 0
+    else
+        print_error "Failed to set password automatically"
+        return 1
+    fi
 }
 
 ################################################################################
@@ -161,6 +124,7 @@ ${GREEN}Commands:${NC}
   ${CYAN}reapply${NC}            Re-run security hardening (safe for existing setups)
   ${CYAN}logs${NC}               View security logs and reports
   ${CYAN}unban <ip>${NC}         Unban IP from fail2ban (use 'all' for all IPs)
+  ${CYAN}whitelist${NC}          Add IP/range to fail2ban whitelist (for dynamic IPs)
   ${CYAN}install${NC}            Install commands system-wide
   ${CYAN}help${NC}               Show this help
 
@@ -182,6 +146,7 @@ EOF
 ################################################################################
 show_status() {
     DETAILED=false
+    # shellcheck disable=SC2034
     [[ "$1" == "--detailed" || "$1" == "-d" ]] && DETAILED=true
     
     clear
@@ -220,17 +185,17 @@ show_status() {
     echo ""
     
     if systemctl is-active --quiet fail2ban 2>/dev/null && F2B_OUTPUT=$(fail2ban-client status sshd 2>&1); then
-        BANNED_COUNT=$(echo "$F2B_OUTPUT" | grep "Currently banned" | awk '{print $4}')
-        TOTAL_BANNED=$(echo "$F2B_OUTPUT" | grep "Total banned" | awk '{print $4}')
+            BANNED_COUNT=$(echo "$F2B_OUTPUT" | grep "Currently banned" | awk '{print $4}')
+            TOTAL_BANNED=$(echo "$F2B_OUTPUT" | grep "Total banned" | awk '{print $4}')
         echo -e "Currently Banned IPs:        ${YELLOW}${BANNED_COUNT:-0}${NC}"
         echo -e "Total Banned (session):      ${YELLOW}${TOTAL_BANNED:-0}${NC}"
         
         if [ "${BANNED_COUNT:-0}" -gt 0 ] 2>/dev/null; then
-            echo ""
-            echo -e "${YELLOW}Active Bans:${NC}"
-            echo "$F2B_OUTPUT" | grep "Banned IP list:" | sed 's/.*Banned IP list://' | tr ' ' '\n' | grep -v '^$' | head -10 | while read ip; do
-                echo "  • $ip"
-            done
+                echo ""
+                echo -e "${YELLOW}Active Bans:${NC}"
+                echo "$F2B_OUTPUT" | grep "Banned IP list:" | sed 's/.*Banned IP list://' | tr ' ' '\n' | grep -v '^$' | head -10 | while read ip; do
+                    echo "  • $ip"
+                done
         fi
     else
         echo -e "Currently Banned IPs:        ${RED}fail2ban not running${NC}"
@@ -444,14 +409,18 @@ run_setup() {
         print_warning "Could not auto-detect your IP (console/VNC/web terminal)"
         CURRENT_IP=""
     fi
-    
-    echo ""
+        
+        echo ""
     echo -e "${YELLOW}⚠️  IMPORTANT: fail2ban Whitelist Configuration${NC}"
     echo "Whitelist trusted IPs to prevent accidental lockouts."
-    echo "Most ISPs use dynamic IPs that change frequently."
-    echo ""
+        echo ""
+    echo -e "${CYAN}Understanding Dynamic IPs:${NC}"
+    echo "• Most home/office ISPs assign DYNAMIC IPs (change on router restart, DHCP renewal)"
+    echo "• If you whitelist ONLY your current IP and it changes, you'll be locked out"
+    echo "• Solution: Whitelist your entire subnet (/24 = 256 IPs, recommended)"
+        echo ""
     echo -e "${CYAN}Choose your whitelist strategy:${NC}"
-    echo ""
+        echo ""
     
     if [ -n "$CURRENT_IP" ]; then
         cat << EOF
@@ -469,16 +438,31 @@ EOF
 EOF
         MENU_MAX=2
     fi
-    echo ""
-    
-    while true; do
-        read -p "Select option (1-$MENU_MAX): " choice
+        echo ""
         
+        while true; do
+        read -p "Select option (1-$MENU_MAX): " choice
+            
         if [ -n "$CURRENT_IP" ]; then
             case $choice in
-                1) FAIL2BAN_IGNOREIP="127.0.0.1/8 $CURRENT_IP" && break ;;
-                2) FAIL2BAN_IGNOREIP="127.0.0.1/8 $SUGGESTED_RANGE_24" && break ;;
-                3) FAIL2BAN_IGNOREIP="127.0.0.1/8 $SUGGESTED_RANGE_16" && break ;;
+                1)
+                    FAIL2BAN_IGNOREIP="127.0.0.1/8 $CURRENT_IP"
+                    print_warning "Using current IP only: $CURRENT_IP"
+                    echo -e "${RED}⚠ RISK: You'll be locked out if your IP changes!${NC}"
+                    break
+                    ;;
+                2)
+                    FAIL2BAN_IGNOREIP="127.0.0.1/8 $SUGGESTED_RANGE_24"
+                    print_success "Using /24 range: $SUGGESTED_RANGE_24 (${NETWORK_PREFIX}.0-255)"
+                    echo -e "${GREEN}✓ SAFE: Covers your entire subnet, protects against IP changes${NC}"
+                    break
+                    ;;
+                3)
+                    FAIL2BAN_IGNOREIP="127.0.0.1/8 $SUGGESTED_RANGE_16"
+                    print_warning "Using /16 range: $SUGGESTED_RANGE_16"
+                    echo -e "${YELLOW}⚠ CAUTION: This whitelists 65,536 IPs (less secure)${NC}"
+                    break
+                    ;;
                 4)
                     echo ""
                     echo "Examples: Single IP (203.0.113.45), Multiple (203.0.113.45 198.51.100.20), Range (203.0.113.0/24)"
@@ -507,7 +491,7 @@ EOF
                         FAIL2BAN_IGNOREIP="127.0.0.1/8 $manual_ip"
                         CURRENT_IP=$(echo $manual_ip | awk '{print $1}' | cut -d'/' -f1)
                         print_success "Whitelist configured"
-                        break
+                            break
                     else
                         print_error "Invalid IP/CIDR format!"
                         continue
@@ -523,8 +507,8 @@ EOF
         fi
     done
     
-    print_success "Whitelist configured: $FAIL2BAN_IGNOREIP"
-    echo ""
+        print_success "Whitelist configured: $FAIL2BAN_IGNOREIP"
+        echo ""
     
     # Final confirmation
     cat << EOF
@@ -551,6 +535,7 @@ EOF
     print_success "System updated"
     
     print_header "2. Creating Admin User"
+    USER_PASSWORD=""  # Initialize password variable
     if ! id "$NEW_USER" &>/dev/null; then
         adduser --disabled-password --gecos "" "$NEW_USER"
         usermod -aG sudo "$NEW_USER"
@@ -558,21 +543,21 @@ EOF
         setup_user_password "$NEW_USER"
     else
         print_warning "User $NEW_USER already exists"
-        read -p "Reset password for $NEW_USER? (y/n) " -n 1 -r
+        read -p "Reset password for $NEW_USER? (y/n) " -n 1 -r < /dev/tty
         echo
         [[ $REPLY =~ ^[Yy]$ ]] && setup_user_password "$NEW_USER"
     fi
     
     print_header "3. SSH Key Authentication"
-    mkdir -p /home/$NEW_USER/.ssh
-    chmod 700 /home/$NEW_USER/.ssh
-    echo "$SSH_PUBLIC_KEY" > /home/$NEW_USER/.ssh/authorized_keys
-    chmod 600 /home/$NEW_USER/.ssh/authorized_keys
-    chown -R $NEW_USER:$NEW_USER /home/$NEW_USER/.ssh
+    mkdir -p "/home/$NEW_USER/.ssh"
+    chmod 700 "/home/$NEW_USER/.ssh"
+    echo "$SSH_PUBLIC_KEY" > "/home/$NEW_USER/.ssh/authorized_keys"
+    chmod 600 "/home/$NEW_USER/.ssh/authorized_keys"
+    chown -R "$NEW_USER:$NEW_USER" "/home/$NEW_USER/.ssh"
     print_success "SSH key configured"
     
     print_header "4. SSH Hardening"
-    cp /etc/ssh/sshd_config /etc/ssh/sshd_config.backup-$(date +%Y%m%d) 2>/dev/null || true
+    cp /etc/ssh/sshd_config "/etc/ssh/sshd_config.backup-$(date +%Y%m%d)" 2>/dev/null || true
     
     cat > /etc/ssh/sshd_config.d/99-hardening.conf << 'EOF'
 PermitRootLogin no
@@ -595,6 +580,40 @@ EOF
     
     print_header "5. fail2ban"
     apt-get install -y fail2ban -qq
+    
+    # Re-detect IP (in case it was lost during sudo execution)
+    DETECTED_IP=""
+    
+    # Method 1: Direct SSH environment variables
+    [ -n "$SSH_CONNECTION" ] && DETECTED_IP=$(echo $SSH_CONNECTION | awk '{print $1}')
+    [ -z "$DETECTED_IP" ] && [ -n "$SSH_CLIENT" ] && DETECTED_IP=$(echo $SSH_CLIENT | awk '{print $1}')
+    
+    # Method 2: Check original user's environment (if run via sudo)
+    if [ -z "$DETECTED_IP" ] && [ -n "$SUDO_USER" ]; then
+        DETECTED_IP=$(ps -eo user,cmd,args | grep "^$SUDO_USER.*sshd:" | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}' | head -1 || true)
+    fi
+    
+    # Method 3: who command (shows remote IPs)
+    [ -z "$DETECTED_IP" ] && DETECTED_IP=$(who am i 2>/dev/null | awk '{print $5}' | sed 's/[()]//g' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' || true)
+    
+    # Method 4: Check w command (shows currently logged in users with IPs)
+    [ -z "$DETECTED_IP" ] && DETECTED_IP=$(w -h 2>/dev/null | grep "$(whoami)\|${SUDO_USER:-nobody}" | head -1 | awk '{print $3}' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' || true)
+    
+    # Method 5: last command (recent logins)
+    [ -z "$DETECTED_IP" ] && DETECTED_IP=$(last -i 2>/dev/null | grep "still logged in" | head -1 | awk '{print $3}' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' || true)
+    
+    # Method 6: Check PAM environment
+    [ -z "$DETECTED_IP" ] && [ -n "$PAM_RHOST" ] && DETECTED_IP="$PAM_RHOST"
+    
+    # Use detected IP or fall back to the one from earlier
+    [ -n "$DETECTED_IP" ] && [ "$DETECTED_IP" != "127.0.0.1" ] && [ "$DETECTED_IP" != "0.0.0.0" ] && CURRENT_IP="$DETECTED_IP"
+    
+    # Show detected IP for verification
+    if [ -n "$CURRENT_IP" ] && [ "$CURRENT_IP" != "127.0.0.1" ]; then
+        print_status "Detected your IP: $CURRENT_IP (will be added to whitelist)"
+    else
+        print_warning "Could not detect your IP - using configured whitelist only"
+    fi
     
     WHITELIST_IPS="$FAIL2BAN_IGNOREIP"
     if [ -n "$CURRENT_IP" ] && [ "$CURRENT_IP" != "127.0.0.1" ]; then
@@ -648,7 +667,7 @@ EOF
 }
 EOF
         
-        cp /etc/ufw/after.rules /etc/ufw/after.rules.backup-$(date +%Y%m%d-%H%M%S) 2>/dev/null || true
+        cp /etc/ufw/after.rules "/etc/ufw/after.rules.backup-$(date +%Y%m%d-%H%M%S)" 2>/dev/null || true
         sed -i '/# Docker UFW Integration/,/^COMMIT$/d' /etc/ufw/after.rules 2>/dev/null || true
         
         cat > /tmp/docker-ufw-rules.txt << 'EOF'
@@ -830,6 +849,28 @@ Admin User:        $NEW_USER
 Your IP:           ${CURRENT_IP:-Not detected}
 Whitelist:         $FAIL2BAN_IGNOREIP
 
+EOF
+
+    # Display password prominently if set
+    if [ -n "$USER_PASSWORD" ]; then
+        cat << EOF
+${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}
+${GREEN}  🔐 YOUR GENERATED PASSWORD (SAVE THIS NOW - ONLY SHOWN ONCE!)${NC}
+${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}
+
+  Username: ${CYAN}$NEW_USER${NC}
+  Password: ${YELLOW}$USER_PASSWORD${NC}
+
+${RED}⚠️  CRITICAL: This password is NOT saved to logs!${NC}
+${YELLOW}    Copy to your password manager NOW!${NC}
+${YELLOW}    Required for: sudo commands, console access, recovery${NC}
+
+${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}
+
+EOF
+    fi
+    
+    cat << EOF
 ${CYAN}🔒 AUTHENTICATION${NC}
 ✓ SSH Key Auth: ENABLED (primary)
 ✓ Password Auth: DISABLED (SSH)
@@ -854,29 +895,43 @@ ${CYAN}📦 CONFIGURED${NC}
 ✅ Log Retention       365 days
 
 ${CYAN}🛠️  COMMANDS${NC}
-  ${GREEN}vm-security status${NC}          Quick overview
-  ${GREEN}sudo vm-security status${NC}     Full details
-  ${GREEN}vm-security logs${NC}            View security logs
-  ${GREEN}sudo vm-security reapply${NC}    Update security
+  ${GREEN}vm-security status${NC}            Quick overview
+  ${GREEN}sudo vm-security status${NC}       Full details
+  ${GREEN}vm-security logs${NC}              View security logs
+  ${GREEN}sudo vm-security whitelist${NC}    Add IP to whitelist (dynamic IP helper)
+  ${GREEN}sudo vm-security reapply${NC}      Update security
 
 ${CYAN}📁 FILES${NC}
-Setup log:         $LOG_FILE ${YELLOW}(contains password)${NC}
+Setup log:         $LOG_FILE
 SSH config:        /etc/ssh/sshd_config.d/99-hardening.conf
 fail2ban config:   /etc/fail2ban/jail.local
 
 ${YELLOW}🔑 Password Recovery:${NC}
-  ${GREEN}sudo cat $LOG_FILE | grep -A 5 "CREDENTIALS"${NC}
+  ${RED}No recovery - password only shown once during setup!${NC}
+  ${YELLOW}Use cloud console to reset if lost:${NC} ${GREEN}sudo passwd $NEW_USER${NC}
 
 EOF
 
     if [ -n "$CURRENT_IP" ]; then
         NETWORK_PREFIX=$(echo $CURRENT_IP | cut -d. -f1-3)
         cat << EOF
-${YELLOW}📡 Dynamic IP Warning:${NC}
-   Your IP may change. To whitelist entire /24 network:
-   ${GREEN}sudo nano /etc/fail2ban/jail.local${NC}
-   Change: ignoreip = 127.0.0.1/8 ${NETWORK_PREFIX}.0/24
-   Then:   ${GREEN}sudo systemctl restart fail2ban${NC}
+${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}
+${YELLOW}  📡 DYNAMIC IP PROTECTION${NC}
+${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}
+
+${CYAN}Current whitelist:${NC} $FAIL2BAN_IGNOREIP
+
+${YELLOW}⚠️  If your ISP uses DHCP (most do), your IP may change!${NC}
+
+${CYAN}If your IP changes and you get locked out:${NC}
+  1. Access via cloud console (password: the one you set)
+  2. Run: ${GREEN}sudo vm-security whitelist${NC}
+  3. Choose option 2 to add your new /24 range
+
+${CYAN}Manual method (edit config):${NC}
+  ${GREEN}sudo nano /etc/fail2ban/jail.local${NC}
+  Change: ignoreip = 127.0.0.1/8 ${NETWORK_PREFIX}.0/24
+  Then:   ${GREEN}sudo systemctl restart fail2ban${NC}
 
 EOF
     fi
@@ -1087,6 +1142,130 @@ run_unban() {
 }
 
 ################################################################################
+# WHITELIST - Add IP/Range to fail2ban Whitelist
+################################################################################
+run_whitelist() {
+    [[ $EUID -ne 0 ]] && print_error "This must be run as root (use sudo)" && exit 1
+    
+    [ ! -f /etc/fail2ban/jail.local ] && print_error "fail2ban not configured. Run 'vm-security setup' first." && exit 1
+    
+    echo ""
+    echo -e "${CYAN}╔══════════════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${CYAN}║           fail2ban Whitelist Manager (Dynamic IP Helper)            ║${NC}"
+    echo -e "${CYAN}╚══════════════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+    
+    # Show current whitelist
+    CURRENT_WHITELIST=$(grep "^ignoreip" /etc/fail2ban/jail.local 2>/dev/null | cut -d'=' -f2 | xargs)
+    echo -e "${YELLOW}Current whitelist:${NC}"
+    echo "  $CURRENT_WHITELIST"
+    echo ""
+    
+    # Detect current IP
+    DETECTED_IP=""
+    [ -n "$SSH_CONNECTION" ] && DETECTED_IP=$(echo $SSH_CONNECTION | awk '{print $1}')
+    [ -z "$DETECTED_IP" ] && [ -n "$SSH_CLIENT" ] && DETECTED_IP=$(echo $SSH_CLIENT | awk '{print $1}')
+    [ -z "$DETECTED_IP" ] && DETECTED_IP=$(who am i 2>/dev/null | awk '{print $5}' | sed 's/[()]//g' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' || true)
+    
+    if [ -n "$DETECTED_IP" ]; then
+        echo -e "${GREEN}Your current IP: $DETECTED_IP${NC}"
+        NETWORK_PREFIX=$(echo $DETECTED_IP | cut -d. -f1-3)
+        SUGGESTED_RANGE="${NETWORK_PREFIX}.0/24"
+        echo -e "${CYAN}Suggested range: $SUGGESTED_RANGE${NC} (covers ${NETWORK_PREFIX}.0-255)"
+        echo ""
+    fi
+    
+    echo -e "${CYAN}Options:${NC}"
+    echo "1) Add current IP ($DETECTED_IP)"
+    echo "2) Add /24 network range ($SUGGESTED_RANGE) ${GREEN}← Recommended for dynamic IPs${NC}"
+    echo "3) Add custom IP or range"
+    echo "4) Replace entire whitelist"
+    echo "5) Cancel"
+    echo ""
+    
+    while true; do
+        read -p "Select option (1-5): " choice
+        
+        case $choice in
+            1)
+                if [ -z "$DETECTED_IP" ]; then
+                    print_error "Could not detect your IP. Use option 3 to enter manually."
+                    continue
+                fi
+                NEW_IP="$DETECTED_IP"
+                break
+                ;;
+            2)
+                if [ -z "$SUGGESTED_RANGE" ]; then
+                    print_error "Could not determine range. Use option 3 to enter manually."
+                    continue
+                fi
+                NEW_IP="$SUGGESTED_RANGE"
+                break
+                ;;
+            3)
+                echo ""
+                echo "Enter IP or range to add (examples: 203.0.113.45 or 203.0.113.0/24):"
+                read -p "IP/Range: " NEW_IP
+                [ -z "$NEW_IP" ] && print_error "Cannot be empty!" && continue
+                if ! validate_ip_or_cidr "$NEW_IP"; then
+                    print_error "Invalid IP/CIDR format!"
+                    continue
+                fi
+                break
+                ;;
+            4)
+                echo ""
+                echo "Enter NEW whitelist (will replace current, space-separated):"
+                echo "Example: 127.0.0.1/8 203.0.113.0/24"
+                read -p "New whitelist: " NEW_WHITELIST
+                [ -z "$NEW_WHITELIST" ] && print_error "Cannot be empty!" && continue
+                if ! validate_ip_or_cidr "$NEW_WHITELIST"; then
+                    print_error "Invalid IP/CIDR format!"
+                    continue
+                fi
+                
+                # Backup and replace
+                cp /etc/fail2ban/jail.local "/etc/fail2ban/jail.local.backup-$(date +%Y%m%d-%H%M%S)"
+                sed -i "s|^ignoreip.*|ignoreip = $NEW_WHITELIST|" /etc/fail2ban/jail.local
+                systemctl restart fail2ban
+                
+                print_success "Whitelist replaced with: $NEW_WHITELIST"
+                echo ""
+                fail2ban-client status sshd
+                return 0
+                ;;
+            5)
+                print_status "Cancelled"
+                return 0
+                ;;
+            *)
+                print_error "Invalid option"
+                continue
+                ;;
+        esac
+    done
+    
+    # Add to existing whitelist
+    if echo "$CURRENT_WHITELIST" | grep -q "$NEW_IP"; then
+        print_warning "$NEW_IP is already in the whitelist"
+        return 0
+    fi
+    
+    # Backup and update
+    cp /etc/fail2ban/jail.local "/etc/fail2ban/jail.local.backup-$(date +%Y%m%d-%H%M%S)"
+    sed -i "s|^ignoreip.*|ignoreip = $CURRENT_WHITELIST $NEW_IP|" /etc/fail2ban/jail.local
+    systemctl restart fail2ban
+    
+    print_success "Added $NEW_IP to whitelist"
+    echo ""
+    echo -e "${YELLOW}New whitelist:${NC}"
+    grep "^ignoreip" /etc/fail2ban/jail.local | cut -d'=' -f2 | xargs
+    echo ""
+    fail2ban-client status sshd
+}
+
+################################################################################
 # MAIN
 ################################################################################
 
@@ -1105,6 +1284,7 @@ case $COMMAND in
     install) run_install ;;
     logs) show_logs ;;
     unban) run_unban "$@" ;;
+    whitelist) run_whitelist ;;
     help|--help|-h) show_help ;;
     *)
         echo -e "${RED}Unknown command: $COMMAND${NC}"
