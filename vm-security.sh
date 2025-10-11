@@ -10,6 +10,7 @@
 #   vm-security install            - Install system-wide commands
 #   vm-security help               - Show this help
 #
+# Author: 2kjm (https://github.com/2kjm)
 # Version: 0.1.0
 # Date: October 2025
 ################################################################################
@@ -482,21 +483,57 @@ run_setup() {
     # PRE-FLIGHT SAFETY CHECKS
     print_status "Running pre-flight safety checks..."
     
-    # Check if we're in an SSH session
-    CURRENT_IP=$(echo $SSH_CONNECTION | awk '{print $1}')
-    if [ -n "$CURRENT_IP" ]; then
+    # Try multiple methods to detect current IP
+    CURRENT_IP=""
+    
+    # Method 1: SSH_CONNECTION (if connected via SSH)
+    if [ -n "$SSH_CONNECTION" ]; then
+        CURRENT_IP=$(echo $SSH_CONNECTION | awk '{print $1}')
+    fi
+    
+    # Method 2: SSH_CLIENT (alternative SSH variable)
+    if [ -z "$CURRENT_IP" ] && [ -n "$SSH_CLIENT" ]; then
+        CURRENT_IP=$(echo $SSH_CLIENT | awk '{print $1}')
+    fi
+    
+    # Method 3: Check who command for recent connections
+    if [ -z "$CURRENT_IP" ]; then
+        CURRENT_IP=$(who am i 2>/dev/null | awk '{print $5}' | sed 's/[()]//g' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' || true)
+    fi
+    
+    # Method 4: Check last command for most recent SSH login
+    if [ -z "$CURRENT_IP" ]; then
+        CURRENT_IP=$(last -i | grep "still logged in" | head -1 | awk '{print $3}' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' || true)
+    fi
+    
+    # Whitelist configuration (always show this, regardless of detection)
+    echo ""
+    if [ -n "$CURRENT_IP" ] && [ "$CURRENT_IP" != "127.0.0.1" ] && [ "$CURRENT_IP" != "0.0.0.0" ]; then
         # Calculate the /24 network range for the current IP
         NETWORK_PREFIX=$(echo $CURRENT_IP | cut -d. -f1-3)
         SUGGESTED_RANGE_24="${NETWORK_PREFIX}.0/24"
         SUGGESTED_RANGE_16=$(echo $CURRENT_IP | cut -d. -f1-2)".0.0/16"
         
-        print_warning "You are connected via SSH from: $CURRENT_IP"
+        print_success "Detected your connection from: $CURRENT_IP"
+    else
+        print_warning "Could not auto-detect your IP address"
+        echo "You are either:"
+        echo "  • Connected via console (not SSH)"
+        echo "  • Using a cloud provider's web console"
+        echo "  • Using VNC or other non-SSH method"
         echo ""
-        echo -e "${YELLOW}⚠️  IMPORTANT: Dynamic IP Warning${NC}"
-        echo "Most ISPs use dynamic IPs that change frequently (DHCP, router restart, etc.)"
-        echo ""
-        echo -e "${CYAN}Choose your fail2ban whitelist strategy:${NC}"
-        echo ""
+        CURRENT_IP=""
+    fi
+    
+    echo ""
+    echo -e "${YELLOW}⚠️  IMPORTANT: fail2ban Whitelist Configuration${NC}"
+    echo "You need to whitelist trusted IPs to prevent accidental lockouts."
+    echo "Most ISPs use dynamic IPs that change frequently (DHCP, router restart, etc.)"
+    echo ""
+    echo -e "${CYAN}Choose your fail2ban whitelist strategy:${NC}"
+    echo ""
+    
+    if [ -n "$CURRENT_IP" ]; then
         echo "1) Current IP only        - $CURRENT_IP"
         echo "   ${RED}⚠ Will lock you out if your IP changes!${NC}"
         echo ""
@@ -511,10 +548,24 @@ run_setup() {
         echo "5) Use configured value   - $FAIL2BAN_IGNOREIP"
         echo ""
         
-        WHITELIST_CHOICE=""
-        while true; do
-            read -p "Select option (1-5): " WHITELIST_CHOICE
-            
+        MENU_MAX=5
+    else
+        echo "1) Enter my IP manually   - Type your public IP address"
+        echo "   ${YELLOW}Find your IP at: https://icanhazip.com or run 'curl ifconfig.me'${NC}"
+        echo ""
+        echo "2) Use configured value   - $FAIL2BAN_IGNOREIP"
+        echo "   ${RED}⚠ WARNING: This only includes localhost! You may get locked out!${NC}"
+        echo ""
+        
+        MENU_MAX=2
+    fi
+    
+    WHITELIST_CHOICE=""
+    while true; do
+        read -p "Select option (1-$MENU_MAX): " WHITELIST_CHOICE
+        
+        if [ -n "$CURRENT_IP" ]; then
+            # Menu when IP was detected
             case $WHITELIST_CHOICE in
                 1)
                     # Current IP only
@@ -617,12 +668,112 @@ run_setup() {
                     print_error "Invalid option. Please select 1-5."
                     ;;
             esac
-        done
-        
-        echo ""
-        print_success "Whitelist configured: $FAIL2BAN_IGNOREIP"
-        echo ""
-    fi
+        else
+            # Menu when IP could NOT be detected
+            case $WHITELIST_CHOICE in
+                1)
+                    # Manual IP entry
+                    echo ""
+                    echo -e "${CYAN}Enter your public IP address or network range:${NC}"
+                    echo ""
+                    echo "To find your public IP, run ONE of these from your LOCAL machine:"
+                    echo "  curl ifconfig.me"
+                    echo "  curl icanhazip.com"
+                    echo "  curl ipinfo.io/ip"
+                    echo ""
+                    echo "Examples of what to enter:"
+                    echo "  Single IP:        203.0.113.45"
+                    echo "  Multiple IPs:     203.0.113.45 198.51.100.20"
+                    echo "  Network range:    203.0.113.0/24 (recommended for dynamic IPs)"
+                    echo "  Mixed:            203.0.113.0/24 198.51.100.20"
+                    echo ""
+                    read -p "Enter IP(s)/range(s) to whitelist: " MANUAL_IP
+                    
+                    # Validate input
+                    if [ -z "$MANUAL_IP" ]; then
+                        print_error "Cannot be empty! You must whitelist at least one IP."
+                        continue
+                    fi
+                    
+                    # Validate each IP/CIDR
+                    VALIDATION_FAILED=false
+                    for ip in $MANUAL_IP; do
+                        # Check if it's CIDR notation (IP/mask)
+                        if [[ "$ip" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}$ ]]; then
+                            # Validate CIDR
+                            IP_PART=$(echo $ip | cut -d'/' -f1)
+                            MASK_PART=$(echo $ip | cut -d'/' -f2)
+                            
+                            # Validate IP octets
+                            IFS='.' read -ra OCTETS <<< "$IP_PART"
+                            for octet in "${OCTETS[@]}"; do
+                                if [ "$octet" -lt 0 ] 2>/dev/null || [ "$octet" -gt 255 ] 2>/dev/null; then
+                                    print_error "Invalid IP octet in $ip: $octet (must be 0-255)"
+                                    VALIDATION_FAILED=true
+                                    break 2
+                                fi
+                            done
+                            
+                            # Validate CIDR mask
+                            if [ "$MASK_PART" -lt 0 ] 2>/dev/null || [ "$MASK_PART" -gt 32 ] 2>/dev/null; then
+                                print_error "Invalid CIDR mask in $ip: /$MASK_PART (must be /0-/32)"
+                                VALIDATION_FAILED=true
+                                break
+                            fi
+                        # Check if it's a plain IP
+                        elif [[ "$ip" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
+                            # Validate IP octets
+                            IFS='.' read -ra OCTETS <<< "$ip"
+                            for octet in "${OCTETS[@]}"; do
+                                if [ "$octet" -lt 0 ] 2>/dev/null || [ "$octet" -gt 255 ] 2>/dev/null; then
+                                    print_error "Invalid IP octet in $ip: $octet (must be 0-255)"
+                                    VALIDATION_FAILED=true
+                                    break 2
+                                fi
+                            done
+                        else
+                            print_error "Invalid format: $ip"
+                            echo "Must be either:"
+                            echo "  - IP address: 203.0.113.45"
+                            echo "  - CIDR range: 203.0.113.0/24"
+                            VALIDATION_FAILED=true
+                            break
+                        fi
+                    done
+                    
+                    if [ "$VALIDATION_FAILED" = true ]; then
+                        continue
+                    fi
+                    
+                    FAIL2BAN_IGNOREIP="127.0.0.1/8 $MANUAL_IP"
+                    CURRENT_IP=$(echo $MANUAL_IP | awk '{print $1}' | cut -d'/' -f1)  # Extract first IP for display
+                    print_success "Whitelist configured: $MANUAL_IP"
+                    break
+                    ;;
+                2)
+                    # Use pre-configured value (risky!)
+                    echo ""
+                    print_warning "Using configured value: $FAIL2BAN_IGNOREIP"
+                    echo -e "${RED}⚠️  WARNING: This only whitelists localhost!${NC}"
+                    echo -e "${RED}    You will likely get locked out on the first failed login!${NC}"
+                    echo ""
+                    read -p "Are you SURE you want to continue? (type 'yes' to confirm): " CONFIRM
+                    if [ "$CONFIRM" != "yes" ]; then
+                        echo "Cancelled. Let's try again..."
+                        continue
+                    fi
+                    break
+                    ;;
+                *)
+                    print_error "Invalid option. Please select 1-$MENU_MAX."
+                    ;;
+            esac
+        fi
+    done
+    
+    echo ""
+    print_success "Whitelist configured: $FAIL2BAN_IGNOREIP"
+    echo ""
     
     # Verify SSH key is valid
     if [ -n "$SSH_PUBLIC_KEY" ]; then
