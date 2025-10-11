@@ -568,6 +568,11 @@ MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com
 EOF
     
     [ "$CHANGE_SSH_PORT" = true ] && sed -i "s/^#\?Port .*/Port $SSH_PORT/" /etc/ssh/sshd_config
+    
+    # Create SSH privilege separation directory if it doesn't exist
+    mkdir -p /run/sshd
+    chmod 0755 /run/sshd
+    
     sshd -T >/dev/null 2>&1 || { print_error "SSH config validation failed!"; sshd -T; exit 1; }
     print_success "SSH configured and validated"
     
