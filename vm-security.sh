@@ -775,7 +775,7 @@ EOF
     cat > /etc/cron.daily/aide-check << 'EOF'
 #!/bin/bash
 mkdir -p /var/log/aide
-/usr/bin/aide --check > /var/log/aide/aide-check-$(date +%Y%m%d).log 2>&1
+/usr/bin/aide --config=/etc/aide/aide.conf --check > /var/log/aide/aide-check-$(date +%Y%m%d).log 2>&1
 EOF
     chmod +x /etc/cron.daily/aide-check
     print_success "AIDE configured"
@@ -869,25 +869,6 @@ EOF
     echo "Your IP:           ${CURRENT_IP:-Not detected}"
     echo "Whitelist:         $FAIL2BAN_IGNOREIP"
     echo ""
-
-    # Display password prominently if set
-    if [ -n "$USER_PASSWORD" ]; then
-        echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-        echo -e "${GREEN}  🔐 YOUR GENERATED PASSWORD (SAVE THIS NOW - ONLY SHOWN ONCE!)${NC}"
-        echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo ""
-        echo -e "  Username: ${CYAN}$NEW_USER${NC}"
-        echo -e "  Password: ${YELLOW}$USER_PASSWORD${NC}"
-        echo ""
-        echo -e "${RED}⚠️  CRITICAL: This password is NOT saved to logs!${NC}"
-        echo -e "${YELLOW}    Copy to your password manager NOW!${NC}"
-        echo -e "${YELLOW}    Required for: sudo commands, console access, recovery${NC}"
-        echo ""
-        echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-        echo ""
-    fi
-    
-    echo ""
     echo -e "${CYAN}🔒 AUTHENTICATION${NC}"
     echo "✓ SSH Key Auth: ENABLED (primary)"
     echo "✓ Password Auth: DISABLED (SSH)"
@@ -956,8 +937,26 @@ EOF
     echo "   • Cloud console still works (password-based)"
     echo -e "   • Unban yourself: ${GREEN}sudo fail2ban-client unban YOUR_IP${NC}"
     echo ""
+    
+    # Display password prominently at the end if set
+    if [ -n "$USER_PASSWORD" ]; then
+        echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e "${GREEN}  🔐 YOUR GENERATED PASSWORD (SAVE THIS NOW - ONLY SHOWN ONCE!)${NC}"
+        echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo ""
+        echo -e "  Username: ${CYAN}$NEW_USER${NC}"
+        echo -e "  Password: ${YELLOW}$USER_PASSWORD${NC}"
+        echo ""
+        echo -e "${RED}⚠️  CRITICAL: This password is NOT saved to logs!${NC}"
+        echo -e "${YELLOW}    Copy to your password manager NOW!${NC}"
+        echo -e "${YELLOW}    Required for: sudo commands, console access, recovery${NC}"
+        echo ""
+        echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo ""
+    fi
+    
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${GREEN}  🎉 Setup Complete! Test SSH and copy password from above before closing this window!${NC}"fr
+    echo -e "${GREEN}  🎉 Setup Complete! Test SSH with the credentials above before closing this window!${NC}"
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
 }
@@ -1014,6 +1013,14 @@ show_logs() {
     )
     
     select opt in "${options[@]}"; do
+        # Check if user entered 0 to exit
+        if [[ "$REPLY" == "0" ]]; then
+            echo ""
+            read -p "Exit log viewer? (y/n) " -n 1 -r
+            echo ""
+            [[ $REPLY =~ ^[Yy]$ ]] && break || continue
+        fi
+        
         case $opt in
             "Recent SSH Failed Logins (50)")
                 echo ""
@@ -1056,7 +1063,12 @@ show_logs() {
                     echo "No setup logs"
                 echo ""
                 ;;
-            "Exit") break ;;
+            "Exit")
+                echo ""
+                read -p "Exit log viewer? (y/n) " -n 1 -r
+                echo ""
+                [[ $REPLY =~ ^[Yy]$ ]] && break
+                ;;
             *) echo "Invalid option" ;;
         esac
     done
