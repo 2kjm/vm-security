@@ -1015,10 +1015,7 @@ show_logs() {
     select opt in "${options[@]}"; do
         # Check if user entered 0 to exit
         if [[ "$REPLY" == "0" ]]; then
-            echo ""
-            read -p "Exit log viewer? (y/n) " -n 1 -r
-            echo ""
-            [[ $REPLY =~ ^[Yy]$ ]] && break || continue
+            break
         fi
         
         case $opt in
@@ -1064,10 +1061,7 @@ show_logs() {
                 echo ""
                 ;;
             "Exit")
-                echo ""
-                read -p "Exit log viewer? (y/n) " -n 1 -r
-                echo ""
-                [[ $REPLY =~ ^[Yy]$ ]] && break
+                break
                 ;;
             *) echo "Invalid option" ;;
         esac
