@@ -1,6 +1,6 @@
-# 🛡️ VM Security Management Tool
+# VM Security Management Tool
 
-> **Enterprise-grade VM security hardening with SOC2-aligned controls, anti-lockout protections, and zero-configuration deployment.**
+> **Enterprise-grade VM security hardening with SOC2-aligned controls and zero-configuration deployment.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Ubuntu 24.04](https://img.shields.io/badge/Ubuntu-24.04-orange.svg)](https://ubuntu.com)
@@ -18,7 +18,6 @@ Transform your Ubuntu server into a security-hardened VM in minutes. Automated s
 - ✅ **Smart Anti-Lockout**: Automatic IP whitelisting, dynamic range support, pre-flight validation
 - ✅ **SOC2 Ready**: Audit logging, file integrity monitoring, 365-day log retention
 - ✅ **Zero Config**: Sensible defaults, interactive prompts, validate-before-apply
-- ✅ **Production Tested**: Used on 100+ servers without incidents
 
 ---
 
