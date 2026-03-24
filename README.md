@@ -43,23 +43,39 @@ Automated security hardening for Ubuntu VMs. Two scripts: `vm-security.sh` for b
 
 ---
 
-## Usage
+## Quick Start
 
-### VM hardening (run first)
+Many VM providers give you a bare Ubuntu image with only root access and no security configuration — no firewall, no fail2ban, no SSH hardening. These scripts handle all of that.
+
+### Run directly from GitHub
 
 ```bash
+# VM hardening (run first)
+curl -fsSL https://raw.githubusercontent.com/2kjm/vm-security/main/vm-security.sh -o vm-security.sh
+sudo bash vm-security.sh
+
+# PostgreSQL hardening (run after vm-security.sh)
+curl -fsSL https://raw.githubusercontent.com/2kjm/vm-security/main/postgres-security.sh -o postgres-security.sh
+sudo bash postgres-security.sh setup
+```
+
+### Or clone the repo
+
+```bash
+git clone https://github.com/2kjm/vm-security.git
+cd vm-security
 sudo bash vm-security.sh
 ```
 
-Interactive prompts will ask for: username, SSH public key, fail2ban whitelist strategy, and Docker/PostgreSQL workload choice.
-
-### PostgreSQL hardening (run after vm-security.sh)
+### PostgreSQL commands
 
 ```bash
 sudo bash postgres-security.sh setup    # Interactive hardening
 sudo bash postgres-security.sh status   # Security health check
 sudo bash postgres-security.sh reapply  # Re-apply non-interactively
 ```
+
+The VM script will interactively ask for: username, SSH public key, fail2ban whitelist strategy, and Docker/PostgreSQL workload choice.
 
 ---
 
