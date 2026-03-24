@@ -55,7 +55,7 @@ print_header() {
 }
 
 check_root() {
-    [[ $EUID -ne 0 ]] && { print_error "Must be run as root (use sudo)"; exit 1; }
+    if [[ $EUID -ne 0 ]]; then print_error "Must be run as root (use sudo)"; exit 1; fi
 }
 
 # Validate SSH port number
@@ -70,7 +70,7 @@ validate_ssh_port() {
 # Validate sshd config and restart — prevents lockout from broken config
 safe_restart_sshd() {
     if sshd -T >/dev/null 2>&1; then
-        systemctl restart sshd
+        systemctl restart sshd 2>/dev/null || systemctl restart ssh
     else
         print_error "SSH config validation failed — sshd NOT restarted to prevent lockout"
         sshd -T
@@ -134,13 +134,17 @@ detect_client_ip() {
     if [ -n "$ip" ] && [ "$ip" != "127.0.0.1" ] && [ "$ip" != "0.0.0.0" ]; then
         echo "$ip"
     fi
+    return 0
 }
 
 # Generate and set a random password for a user
 setup_user_password() {
     local user="$1"
     local random_pass
-    random_pass=$(openssl rand -hex 16)
+    # Generate password meeting PAM complexity: upper + lower + digit + special
+    local base
+    base=$(openssl rand -base64 48 | tr -dc 'A-Za-z0-9' | head -c 24)
+    random_pass="${base}@Kz5"
 
     if chpasswd <<< "$user:$random_pass"; then
         USER_PASSWORD="$random_pass"
@@ -183,7 +187,7 @@ prompt_user_config() {
         print_warning "Without a valid SSH key you WILL be locked out."
         echo ""
         read -rp "Have your SSH public key ready? (y/n) " -n 1; echo
-        [[ ! $REPLY =~ ^[Yy]$ ]] && { print_error "Get your SSH key first."; exit 1; }
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then print_error "Get your SSH key first."; exit 1; fi
 
         read -rp "Paste your SSH public key: " -r SSH_PUBLIC_KEY
 
@@ -191,8 +195,9 @@ prompt_user_config() {
             print_error "DSA keys are deprecated and insecure. Use: ssh-keygen -t ed25519"
             exit 1
         fi
-        [[ ! "$SSH_PUBLIC_KEY" =~ ^(ssh-rsa|ssh-ed25519|ecdsa-sha2-nistp(256|384|521)|sk-ssh-ed25519|sk-ecdsa-sha2-nistp256) ]] && \
-            { print_error "Invalid SSH key format"; exit 1; }
+        if [[ ! "$SSH_PUBLIC_KEY" =~ ^(ssh-rsa|ssh-ed25519|ecdsa-sha2-nistp(256|384|521)|sk-ssh-ed25519|sk-ecdsa-sha2-nistp256) ]]; then
+            print_error "Invalid SSH key format"; exit 1
+        fi
 
         # Validate key with ssh-keygen using secure temp file
         local tmpkey
@@ -323,17 +328,15 @@ prompt_user_config() {
     print_warning "Test SSH in a NEW terminal BEFORE closing this one!"
     echo ""
     read -rp "Continue? (y/n) " -n 1; echo
-    [[ ! $REPLY =~ ^[Yy]$ ]] && exit 0
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then exit 0; fi
 }
 
 ################################################################################
 # APPLY HARDENING (the actual security work)
 ################################################################################
 apply_hardening() {
-    trap 'print_error "Failed at line $LINENO. Check ${LOG_FILE:-/root/security-setup.log}"; trap - ERR; exit 1' ERR
-
     LOG_FILE="/root/security-setup-$(date +%Y%m%d-%H%M%S).log"
-    exec > >(tee -a "$LOG_FILE") 2>&1
+    trap 'print_error "Failed at line $LINENO"; trap - ERR; exit 1' ERR
 
     print_warning "DO NOT close this terminal until you have tested SSH in a new window"
     echo ""
@@ -356,7 +359,7 @@ apply_hardening() {
     else
         print_warning "User $NEW_USER already exists"
         read -rp "Reset password? (y/n) " -n 1 < /dev/tty; echo
-        [[ $REPLY =~ ^[Yy]$ ]] && setup_user_password "$NEW_USER"
+        if [[ $REPLY =~ ^[Yy]$ ]]; then setup_user_password "$NEW_USER"; fi
     fi
 
     mkdir -p "/home/$NEW_USER/.ssh"
@@ -380,6 +383,12 @@ apply_hardening() {
         print_status "Added Include directive to sshd_config"
     fi
 
+    # Override cloud-init SSH settings that conflict with hardening
+    if [ -f /etc/ssh/sshd_config.d/50-cloud-init.conf ]; then
+        print_status "Overriding cloud-init SSH config (50-cloud-init.conf)"
+        echo "PasswordAuthentication no" > /etc/ssh/sshd_config.d/50-cloud-init.conf
+    fi
+
     # Drop-in config (always overwritten, idempotent)
     cat > /etc/ssh/sshd_config.d/99-hardening.conf << 'EOF'
 PermitRootLogin no
@@ -395,7 +404,7 @@ LogLevel VERBOSE
 AllowGroups sudo
 Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com
 MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com
-KexAlgorithms curve25519-sha256,curve25519-sha256@libssh.com,diffie-hellman-group16-sha512,diffie-hellman-group18-sha512
+KexAlgorithms curve25519-sha256,diffie-hellman-group16-sha512,diffie-hellman-group18-sha512
 HostKeyAlgorithms ssh-ed25519,rsa-sha2-512,rsa-sha2-256
 EOF
 
@@ -423,7 +432,7 @@ PermitRootLogin no
 # vm-security-force-end
 EOF
 
-    [ "$CHANGE_SSH_PORT" = true ] && sed -i "s/^#\\?Port .*/Port $SSH_PORT/" /etc/ssh/sshd_config
+    if [ "$CHANGE_SSH_PORT" = true ]; then sed -i "s/^#\\?Port .*/Port $SSH_PORT/" /etc/ssh/sshd_config; fi
 
     mkdir -p /run/sshd && chmod 0755 /run/sshd
     if ! sshd -T >/dev/null 2>&1; then
@@ -492,7 +501,7 @@ EOF
         docker_rules_tmp=$(mktemp)
         chmod 600 "$docker_rules_tmp"
         cat > "$docker_rules_tmp" << 'EOF'
-# Docker UFW Integration — PREVENTS BYPASS
+# Docker UFW Integration - PREVENTS BYPASS
 *filter
 :ufw-user-forward - [0:0]
 :ufw-docker-logging-deny - [0:0]
@@ -528,8 +537,8 @@ EOF
 
     # Re-detect IP to ensure whitelist is current
     local detected_ip
-    detected_ip=$(detect_client_ip)
-    [ -n "$detected_ip" ] && CURRENT_IP="$detected_ip"
+    detected_ip=$(detect_client_ip) || true
+    if [ -n "$detected_ip" ]; then CURRENT_IP="$detected_ip"; fi
 
     local whitelist_ips="$FAIL2BAN_IGNOREIP"
     if [ -n "$CURRENT_IP" ]; then
@@ -599,18 +608,18 @@ EOF
     # 9. Kernel hardening
     print_header "9. Kernel Hardening"
     cat > /etc/sysctl.d/99-security.conf << 'EOF'
-# IPv4 — all interfaces
+# IPv4 - all interfaces
 net.ipv4.conf.all.send_redirects = 0
 net.ipv4.conf.all.accept_redirects = 0
 net.ipv4.conf.all.accept_source_route = 0
 net.ipv4.conf.all.rp_filter = 1
 net.ipv4.conf.all.log_martians = 1
-# IPv4 — default (new interfaces: Docker bridges, VPNs, etc.)
+# IPv4 - default (new interfaces: Docker bridges, VPNs, etc.)
 net.ipv4.conf.default.send_redirects = 0
 net.ipv4.conf.default.accept_redirects = 0
 net.ipv4.conf.default.accept_source_route = 0
 net.ipv4.conf.default.rp_filter = 1
-# IPv4 — global
+# IPv4 - global
 net.ipv4.tcp_syncookies = 1
 net.ipv4.icmp_echo_ignore_broadcasts = 1
 # IPv6
@@ -704,8 +713,9 @@ EOF
     echo "  SSH hardening     — key-only, no root, strong ciphers"
     echo "  fail2ban          — $FAIL2BAN_MAXRETRY attempts, ${FAIL2BAN_BANTIME}s ban"
     echo "  UFW firewall      — default deny, SSH + HTTP(S) allowed"
-    [ "$INSTALL_DOCKER" = true ] && \
+    if [ "$INSTALL_DOCKER" = true ]; then
     echo "  Docker            — official CE, UFW bypass prevented, hardened daemon"
+    fi
     echo "  Auto updates      — security patches only"
     echo "  Kernel hardening  — network stack secured"
     echo "  auditd            — system call and file access logging"
@@ -732,18 +742,15 @@ EOF
     print_warning "Console access uses password (set during setup)"
     echo ""
 
-    # Password display — to terminal ONLY, not to log
+    # Password display
     if [ -n "$USER_PASSWORD" ]; then
-        {
-            echo ""
-            echo -e "${GREEN}--- GENERATED PASSWORD (save now, shown once) ---${NC}"
-            echo -e "  Username: ${CYAN}$NEW_USER${NC}"
-            echo -e "  Password: ${YELLOW}$USER_PASSWORD${NC}"
-            echo -e "  Use for:  sudo, console access, recovery"
-            echo -e "${GREEN}--------------------------------------------------${NC}"
-            echo ""
-        } > /dev/tty 2>/dev/null || echo "[Password display requires a terminal]"
-        echo "[Password displayed to terminal only — not logged]"
+        echo ""
+        echo -e "${GREEN}--- GENERATED PASSWORD (save now, shown once) ---${NC}"
+        echo -e "  Username: ${CYAN}$NEW_USER${NC}"
+        echo -e "  Password: ${YELLOW}$USER_PASSWORD${NC}"
+        echo -e "  Use for:  sudo, console access, recovery"
+        echo -e "${GREEN}--------------------------------------------------${NC}"
+        echo ""
     fi
 
     print_success "Done. Test SSH before closing this terminal!"

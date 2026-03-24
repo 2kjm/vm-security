@@ -48,7 +48,7 @@ print_header() {
 }
 
 check_root() {
-    [[ $EUID -ne 0 ]] && { print_error "Must be run as root (use sudo)"; exit 1; }
+    if [[ $EUID -ne 0 ]]; then print_error "Must be run as root (use sudo)"; exit 1; fi
 }
 
 validate_ip_or_cidr() {
@@ -102,7 +102,7 @@ install_pg() {
 
     print_warning "PostgreSQL is not installed."
     read -rp "Install PostgreSQL ${PG_INSTALL_VERSION} from the official PGDG repository? (y/n) " -n 1; echo
-    [[ ! $REPLY =~ ^[Yy]$ ]] && { print_error "PostgreSQL is required. Exiting."; exit 1; }
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then print_error "PostgreSQL is required. Exiting."; exit 1; fi
 
     print_status "Setting up PostgreSQL apt repository..."
     apt-get install -y curl ca-certificates -qq
@@ -298,7 +298,7 @@ prompt_config() {
         print_warning "Docker is installed on this system."
         print_warning "Running Docker and PostgreSQL on the same VM is not recommended."
         read -rp "Continue anyway? (type 'yes' to confirm): " confirm
-        [ "$confirm" != "yes" ] && { print_error "Aborted. Remove Docker first or use a separate VM."; exit 1; }
+        if [ "$confirm" != "yes" ]; then print_error "Aborted. Remove Docker first or use a separate VM."; exit 1; fi
         print_warning "Proceeding despite Docker being present."
         echo ""
     fi
@@ -401,7 +401,7 @@ prompt_config() {
     print_warning "PostgreSQL will be reloaded after changes."
     echo ""
     read -rp "Continue? (y/n) " -n 1; echo
-    [[ ! $REPLY =~ ^[Yy]$ ]] && exit 0
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then exit 0; fi
 }
 
 ################################################################################
@@ -522,7 +522,7 @@ setup_ssl() {
                 return 0
             fi
             read -rp "Certificate still valid. Regenerate? (y/n) " -n 1 < /dev/tty; echo
-            [[ ! $REPLY =~ ^[Yy]$ ]] && return 0
+            if [[ ! $REPLY =~ ^[Yy]$ ]]; then return 0; fi
         else
             print_warning "Certificate expires in $days_left days — regenerating"
         fi
@@ -687,7 +687,7 @@ setup_performance() {
     fi
     # Cap at 40% of RAM per doc guidance
     local max_shared=$(( TOTAL_RAM_MB * 40 / 100 ))
-    [ "$shared_buffers_mb" -gt "$max_shared" ] && shared_buffers_mb=$max_shared
+    if [ "$shared_buffers_mb" -gt "$max_shared" ]; then shared_buffers_mb=$max_shared; fi
 
     # --- effective_cache_size: 75% of RAM ---
     # Represents shared_buffers + OS page cache available to PG
@@ -695,18 +695,18 @@ setup_performance() {
 
     # --- maintenance_work_mem: RAM/16, capped at 2GB ---
     local maint_work_mem_mb=$(( TOTAL_RAM_MB / 16 ))
-    [ "$maint_work_mem_mb" -lt 64 ] && maint_work_mem_mb=64
-    [ "$maint_work_mem_mb" -gt 2048 ] && maint_work_mem_mb=2048
+    if [ "$maint_work_mem_mb" -lt 64 ]; then maint_work_mem_mb=64; fi
+    if [ "$maint_work_mem_mb" -gt 2048 ]; then maint_work_mem_mb=2048; fi
 
     # --- work_mem: conservative — RAM / 32 / max_parallel_workers ---
     # The doc warns this is per-operation per-session, so keep it conservative
     local work_mem_mb=$(( TOTAL_RAM_MB / 32 ))
-    [ "$work_mem_mb" -lt 4 ] && work_mem_mb=4
-    [ "$work_mem_mb" -gt 256 ] && work_mem_mb=256
+    if [ "$work_mem_mb" -lt 4 ]; then work_mem_mb=4; fi
+    if [ "$work_mem_mb" -gt 256 ]; then work_mem_mb=256; fi
 
     # --- huge_pages: 'try' when >= 2GB RAM (doc: reduces page table overhead) ---
     local huge_pages="off"
-    [ "$TOTAL_RAM_MB" -ge 2048 ] && huge_pages="try"
+    if [ "$TOTAL_RAM_MB" -ge 2048 ]; then huge_pages="try"; fi
 
     # --- wal_buffers: -1 lets PG auto-tune to 1/32 of shared_buffers (doc default) ---
     local wal_buffers="-1"
@@ -725,21 +725,21 @@ setup_performance() {
     # --- Worker processes: scale with CPU cores ---
     # max_worker_processes: doc default 8, set to CPU cores (min 8)
     local max_workers=$CPU_CORES
-    [ "$max_workers" -lt 8 ] && max_workers=8
+    if [ "$max_workers" -lt 8 ]; then max_workers=8; fi
 
     # max_parallel_workers: doc says cannot exceed max_worker_processes
     local max_parallel=$CPU_CORES
-    [ "$max_parallel" -gt "$max_workers" ] && max_parallel=$max_workers
+    if [ "$max_parallel" -gt "$max_workers" ]; then max_parallel=$max_workers; fi
 
     # max_parallel_workers_per_gather: doc default 2, scale to CPU/2 capped at 4
     local parallel_per_gather=$(( CPU_CORES / 2 ))
-    [ "$parallel_per_gather" -lt 2 ] && parallel_per_gather=2
-    [ "$parallel_per_gather" -gt 4 ] && parallel_per_gather=4
+    if [ "$parallel_per_gather" -lt 2 ]; then parallel_per_gather=2; fi
+    if [ "$parallel_per_gather" -gt 4 ]; then parallel_per_gather=4; fi
 
     # max_parallel_maintenance_workers: doc default 2, scale to CPU/2 capped at 4
     local parallel_maint=$(( CPU_CORES / 2 ))
-    [ "$parallel_maint" -lt 2 ] && parallel_maint=2
-    [ "$parallel_maint" -gt 4 ] && parallel_maint=4
+    if [ "$parallel_maint" -lt 2 ]; then parallel_maint=2; fi
+    if [ "$parallel_maint" -gt 4 ]; then parallel_maint=4; fi
 
     # --- I/O settings based on storage type ---
     # Doc: effective_io_concurrency default 16; higher for SSDs
@@ -887,7 +887,7 @@ setup_pg_hba() {
         insecure_count=$((insecure_count + $(grep -cE '^\s*(host|hostssl|hostnossl).*\bmd5\b' "$backup")))
         print_warning "Found 'md5' auth entries — upgrading to scram-sha-256"
     fi
-    [ "$insecure_count" -gt 0 ] && print_warning "Replacing $insecure_count insecure entries"
+    if [ "$insecure_count" -gt 0 ]; then print_warning "Replacing $insecure_count insecure entries"; fi
 
     cat > "$hba" << 'EOF'
 # PostgreSQL Client Authentication — managed by pg-security
@@ -917,7 +917,7 @@ EOF
         for peer in $REPLICATION_PEERS; do
             # Append /32 if no CIDR given
             local peer_cidr="$peer"
-            [[ "$peer" != */* ]] && peer_cidr="${peer}/32"
+            if [[ "$peer" != */* ]]; then peer_cidr="${peer}/32"; fi
             printf "hostssl %-13s %-9s %-19s %s\n" "replication" "all" "$peer_cidr" "scram-sha-256" >> "$hba"
         done
     fi
@@ -1062,7 +1062,7 @@ setup_ufw_pg() {
     if [ -n "$REPLICATION_PEERS" ]; then
         for peer in $REPLICATION_PEERS; do
             local peer_cidr="$peer"
-            [[ "$peer" != */* ]] && peer_cidr="${peer}/32"
+            if [[ "$peer" != */* ]]; then peer_cidr="${peer}/32"; fi
             ufw allow from "$peer_cidr" to any port "$PG_PORT" proto tcp >/dev/null
             print_status "Allowed replication peer $peer_cidr -> port $PG_PORT"
             rules_added=$((rules_added + 1))
@@ -1108,10 +1108,8 @@ setup_permissions() {
 ################################################################################
 
 apply_hardening() {
-    trap 'print_error "Failed at line $LINENO"; trap - ERR; exit 1' ERR
-
     LOG_FILE="/root/pg-security-$(date +%Y%m%d-%H%M%S).log"
-    exec > >(tee -a "$LOG_FILE") 2>&1
+    trap 'print_error "Failed at line $LINENO"; trap - ERR; exit 1' ERR
 
     setup_kernel
     setup_limits
@@ -1209,7 +1207,7 @@ show_status() {
     detect_ha
 
     print_success "PostgreSQL $PG_VERSION (cluster: $PG_CLUSTER, port: $PG_PORT)"
-    [ -n "$HA_TOOL" ] && print_status "HA tool: $HA_TOOL"
+    if [ -n "$HA_TOOL" ]; then print_status "HA tool: $HA_TOOL"; fi
     echo ""
 
     local SCORE=100
@@ -1315,7 +1313,7 @@ show_status() {
     fi
 
     local thp="unknown"
-    [ -f /sys/kernel/mm/transparent_hugepage/enabled ] && thp=$(sed -n 's/.*\[\([^]]*\)\].*/\1/p' /sys/kernel/mm/transparent_hugepage/enabled)
+    if [ -f /sys/kernel/mm/transparent_hugepage/enabled ]; then thp=$(sed -n 's/.*\[\([^]]*\)\].*/\1/p' /sys/kernel/mm/transparent_hugepage/enabled); fi
     if [ "$thp" = "never" ]; then
         printf "$svc_fmt" "Transparent Huge Pages:" "$(echo -e "${GREEN}disabled${NC}")"
     else
@@ -1414,7 +1412,7 @@ show_status() {
 
     # Score
     print_header "Health Score"
-    [ "$SCORE" -lt 0 ] && SCORE=0
+    if [ "$SCORE" -lt 0 ]; then SCORE=0; fi
     if [ $SCORE -ge 90 ]; then
         echo -e "  ${GREEN}${SCORE}/100 — Excellent${NC}"
     elif [ $SCORE -ge 70 ]; then
